@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+numpy
+joblib
+requests
+librosa
+soundfile
+scikit-learn
+pydantic
