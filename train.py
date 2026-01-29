@@ -1,61 +1,68 @@
 import os
+import librosa
 import numpy as np
 import joblib
-from features import extract_features
+from tqdm import tqdm
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
 
-# Lists to store data
-X = []
-y = []
+DATASET_DIR = "data"
+MODEL_PATH = "models/voice_detector.pkl"
 
-DATA_DIR = "data"
-LABELS = ["human", "ai"]
+SAMPLE_RATE = 16000
+N_MFCC = 40
 
-print("Loading data...")
+def extract_features(path):
+    audio, sr = librosa.load(path, sr=SAMPLE_RATE)
+    mfcc = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=N_MFCC)
+    return np.mean(mfcc.T, axis=0)
 
-for label in LABELS:
-    folder_path = os.path.join(DATA_DIR, label)
+X, y = [], []
 
-    if not os.path.exists(folder_path):
-        raise Exception(f"Folder not found: {folder_path}")
+print("📦 Loading dataset...")
 
-    for file_name in os.listdir(folder_path):
-        file_path = os.path.join(folder_path, file_name)
+for label_name, label_value in [("human", 0), ("ai", 1)]:
+    base_path = os.path.join(DATASET_DIR, label_name)
 
-        try:
-            features = extract_features(file_path)
-            X.append(features)
-            y.append(label)
-        except Exception as e:
-            print(f"Skipped {file_name}: {e}")
+    for lang in os.listdir(base_path):
+        lang_path = os.path.join(base_path, lang)
+
+        for file in tqdm(os.listdir(lang_path), desc=f"{label_name}-{lang}"):
+            if not file.lower().endswith(".mp3"):
+                continue
+
+            file_path = os.path.join(lang_path, file)
+
+            try:
+                features = extract_features(file_path)
+                X.append(features)
+                y.append(label_value)
+            except Exception as e:
+                print(f"Skipping {file}: {e}")
 
 X = np.array(X)
 y = np.array(y)
 
-print("Total samples:", len(X))
+print(f"✅ Samples loaded: {len(X)}")
 
-# Train-test split
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
+    X, y, test_size=0.2, random_state=42, stratify=y
 )
 
-# Baseline model
 model = RandomForestClassifier(
-    n_estimators=100,
-    random_state=42
+    n_estimators=300,
+    random_state=42,
+    n_jobs=-1
 )
 
-print("Training model...")
+print("🧠 Training...")
 model.fit(X_train, y_train)
 
-# Evaluation
-train_acc = model.score(X_train, y_train)
-test_acc = model.score(X_test, y_test)
+print("📊 Evaluation")
+print(classification_report(y_test, model.predict(X_test)))
 
-print("Training accuracy:", round(train_acc, 3))
-print("Test accuracy:", round(test_acc, 3))
+os.makedirs("models", exist_ok=True)
+joblib.dump(model, MODEL_PATH)
 
-# Save model
-joblib.dump(model, "baseline_model.pkl")
-print("Model saved as baseline_model.pkl")
+print(f"💾 Model saved → {MODEL_PATH}")

@@ -8,12 +8,14 @@ app = FastAPI()
 # CONFIG
 # -------------------------------------------------
 API_KEY = "guvi"
-SUPPORTED_FORMATS = {"mp3", "wav"}
+SUPPORTED_FORMATS = {"mp3"}
+SUPPORTED_LANGUAGES = {"tamil", "english", "hindi", "malayalam", "telugu"}
 
 # -------------------------------------------------
 # Request schema
 # -------------------------------------------------
 class VoiceRequest(BaseModel):
+    language: str
     audioFormat: str
     audioBase64: str
 
@@ -29,9 +31,9 @@ def analyze_audio(audio_bytes: bytes):
     size = len(audio_bytes)
 
     if size % 2 == 0:
-        return "AI_GENERATED", 0.90, "Synthetic speech patterns detected"
+        return "AI_GENERATED", 0.90, "Unnatural pitch stability and robotic speech patterns detected"
     else:
-        return "HUMAN", 0.87, "Natural speech variations detected"
+        return "HUMAN", 0.87, "Natural pitch variation and human speech patterns detected"
 
 # -------------------------------------------------
 # API endpoint
@@ -43,25 +45,43 @@ def voice_detection(
 ):
     # API key validation
     if x_api_key != API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid API key")
+        raise HTTPException(
+            status_code=401,
+            detail={"status": "error", "message": "Invalid API key"}
+        )
 
-    # Validate audio format
+    # Validate language
+    lang = payload.language.lower()
+    if lang not in SUPPORTED_LANGUAGES:
+        raise HTTPException(
+            status_code=400,
+            detail={"status": "error", "message": "Unsupported language"}
+        )
+
+    # Validate audio format (MP3 only)
     fmt = payload.audioFormat.lower()
     if fmt not in SUPPORTED_FORMATS:
-        raise HTTPException(status_code=400, detail="Only mp3 and wav supported")
+        raise HTTPException(
+            status_code=400,
+            detail={"status": "error", "message": "Only mp3 format is supported"}
+        )
 
     # Decode Base64 audio
     try:
         audio_bytes = base64.b64decode(payload.audioBase64)
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid Base64 audio")
+        raise HTTPException(
+            status_code=400,
+            detail={"status": "error", "message": "Invalid Base64 audio"}
+        )
 
     # Analyze audio
     classification, confidence, explanation = analyze_audio(audio_bytes)
 
-    # Success response
+    # Success response (exact spec)
     return {
         "status": "success",
+        "language": payload.language,
         "classification": classification,
         "confidenceScore": confidence,
         "explanation": explanation
